@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/tensor-programming/golang-blockchain/blockchain"
+	"github.com/tensor-programming/golang-blockchain/network"
 	"github.com/tensor-programming/golang-blockchain/wallet"
 )
 
@@ -25,6 +26,7 @@ func (cli *CommandLine) printUsage() {
 	fmt.Println(" addtransaction -from FROM -to TO -hash HASH - Add transaction to the block")
 	fmt.Println(" createwallet - Creates a new Wallet")
 	fmt.Println(" listaddresses - Lists the addresses in our wallet file")
+	fmt.Println(" startnode -miner ADDRESS - Start a node with ID specified in NODE_ID env. var. -miner enables mining")
 }
 
 func (cli *CommandLine) validateArgs() {
@@ -34,8 +36,21 @@ func (cli *CommandLine) validateArgs() {
 	}
 }
 
-func (cli *CommandLine) listAddresses() {
-	wallets, _ := wallet.CreateWallets()
+func (cli *CommandLine) StartNode(nodeID, minerAddress string) {
+	fmt.Printf("Starting Node %s\n", nodeID)
+
+	if len(minerAddress) > 0 {
+		if wallet.ValidateAddress(minerAddress) {
+			fmt.Println("Mining is on. Address to receive rewards: ", minerAddress)
+		} else {
+			log.Panic("Wrong miner address!")
+		}
+	}
+	network.StartServer(nodeID, minerAddress)
+}
+
+func (cli *CommandLine) listAddresses(nodeID string) {
+	wallets, _ := wallet.CreateWallets(nodeID)
 	addresses := wallets.GetAllAddresses()
 
 	for _, address := range addresses {
@@ -43,23 +58,23 @@ func (cli *CommandLine) listAddresses() {
 	}
 }
 
-func (cli *CommandLine) createWallet() {
-	wallets, _ := wallet.CreateWallets()
+func (cli *CommandLine) createWallet(nodeID string) {
+	wallets, _ := wallet.CreateWallets(nodeID)
 	address := wallets.AddWallet()
-	wallets.SaveFile()
+	wallets.SaveFile(nodeID)
 
 	fmt.Printf("New address is: %s\n", address)
 }
 
-func (cli *CommandLine) addBlock(data string) {
-	chain := blockchain.ContinueBlockChain("")
+func (cli *CommandLine) MineBlock(data, nodeID string) {
+	chain := blockchain.ContinueBlockChain(nodeID)
 	defer chain.Database.Close()
-	chain.AddBlock(data)
+	chain.MineBlock(data)
 	fmt.Println("Added Block!")
 }
 
-func (cli *CommandLine) printChain() {
-	chain := blockchain.ContinueBlockChain("")
+func (cli *CommandLine) printChain(nodeID string) {
+	chain := blockchain.ContinueBlockChain(nodeID)
 	defer chain.Database.Close()
 	iter := chain.Iterator()
 
@@ -70,6 +85,7 @@ func (cli *CommandLine) printChain() {
 		fmt.Printf("Data: %s\n", block.Data)
 		fmt.Printf("Hash: %x\n", block.Hash)
 		fmt.Printf("Nonce: %x\n", block.Nonce)
+		fmt.Printf("Version: %x\n", block.Version)
 		pow := blockchain.NewProof(block)
 		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
 		for _, tx := range block.Transactions {
@@ -83,17 +99,18 @@ func (cli *CommandLine) printChain() {
 	}
 }
 
-func (cli *CommandLine) createBlockChain(address string) {
+func (cli *CommandLine) createBlockChain(address, nodeID string) {
 	if !wallet.ValidateAddress(address) {
 		log.Panic("Address is not valid")
 	}
-	chain := blockchain.InitBlockChain(address)
-	chain.Database.Close()
+	chain := blockchain.InitBlockChain(address, nodeID)
+	defer chain.Database.Close()
+
 	fmt.Println("Finished!")
 }
 
-func (cli *CommandLine) getBlock(hash string) {
-	chain := blockchain.ContinueBlockChain(hash)
+func (cli *CommandLine) getBlock(hash, nodeID string) {
+	chain := blockchain.ContinueBlockChain(nodeID)
 	defer chain.Database.Close()
 
 	block := chain.FindBlock(hash)
@@ -113,14 +130,14 @@ func (cli *CommandLine) updateBlock(hash string) {
 
 }
 
-func (cli *CommandLine) addTransaction(from, hash string) {
+func (cli *CommandLine) addTransaction(from, hash, nodeID string) {
 	if !wallet.ValidateAddress(from) {
 		log.Panic("Address is not valid")
 	}
-	chain := blockchain.ContinueBlockChain(hash)
+	chain := blockchain.ContinueBlockChain(nodeID)
 	defer chain.Database.Close()
 
-	tx := blockchain.NewTransaction(from, hash, chain)
+	tx := blockchain.NewTransaction(from, nodeID, hash, chain)
 	chain.AddTransactions([]*blockchain.Transaction{tx}, hash)
 	fmt.Println("Transaction Added")
 
@@ -128,6 +145,12 @@ func (cli *CommandLine) addTransaction(from, hash string) {
 
 func (cli *CommandLine) Run() {
 	cli.validateArgs()
+
+	nodeID := os.Getenv("NODE_ID")
+	if nodeID == "" {
+		fmt.Printf("NODE_ID env is not set!")
+		runtime.Goexit()
+	}
 
 	addBlockCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
@@ -138,12 +161,14 @@ func (cli *CommandLine) Run() {
 	addTransactionCmd := flag.NewFlagSet("addtransaction", flag.ExitOnError)
 	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
 	listAddressesCmd := flag.NewFlagSet("listaddresses", flag.ExitOnError)
+	startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
 
 	getBlockHash := getBlockCmd.String("hash", "", "The hash to get block for")
 	updateBlockHash := updateBlockCmd.String("hash", "", "The hash to get block for")
 	sendFrom := addTransactionCmd.String("from", "", "Source wallet address")
 	sendTo := addTransactionCmd.String("to", "", "Destination block hash")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to")
+	startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
 
 	switch os.Args[1] {
 	case "add":
@@ -152,6 +177,12 @@ func (cli *CommandLine) Run() {
 
 	case "createblockchain":
 		err := createBlockchainCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+
+	case "startnode":
+		err := startNodeCmd.Parse(os.Args[2:])
 		if err != nil {
 			log.Panic(err)
 		}
@@ -195,11 +226,11 @@ func (cli *CommandLine) Run() {
 			addBlockCmd.Usage()
 			runtime.Goexit()
 		}
-		cli.addBlock(*addBlockData)
+		cli.MineBlock(*addBlockData, nodeID)
 	}
 
 	if printChainCmd.Parsed() {
-		cli.printChain()
+		cli.printChain(nodeID)
 	}
 
 	if createBlockchainCmd.Parsed() {
@@ -207,7 +238,7 @@ func (cli *CommandLine) Run() {
 			createBlockchainCmd.Usage()
 			runtime.Goexit()
 		}
-		cli.createBlockChain(*createBlockchainAddress)
+		cli.createBlockChain(*createBlockchainAddress, nodeID)
 	}
 
 	if getBlockCmd.Parsed() {
@@ -215,7 +246,7 @@ func (cli *CommandLine) Run() {
 			getBlockCmd.Usage()
 			runtime.Goexit()
 		}
-		cli.getBlock(*getBlockHash)
+		cli.getBlock(*getBlockHash, nodeID)
 	}
 
 	if updateBlockCmd.Parsed() {
@@ -227,10 +258,11 @@ func (cli *CommandLine) Run() {
 	}
 
 	if createWalletCmd.Parsed() {
-		cli.createWallet()
+		cli.createWallet(nodeID)
 	}
+
 	if listAddressesCmd.Parsed() {
-		cli.listAddresses()
+		cli.listAddresses(nodeID)
 	}
 
 	if addTransactionCmd.Parsed() {
@@ -239,6 +271,15 @@ func (cli *CommandLine) Run() {
 			runtime.Goexit()
 		}
 
-		cli.addTransaction(*sendFrom, *sendTo)
+		cli.addTransaction(*sendFrom, *sendTo, nodeID)
+	}
+
+	if startNodeCmd.Parsed() {
+		nodeID := os.Getenv("NODE_ID")
+		if nodeID == "" {
+			startNodeCmd.Usage()
+			runtime.Goexit()
+		}
+		cli.StartNode(nodeID, *startNodeMiner)
 	}
 }

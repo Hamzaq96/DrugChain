@@ -63,9 +63,10 @@ type Tx struct {
 
 //Helps in syncing the blockchain across all nodes.
 type Version struct {
-	Version    int
-	BestHeight int
-	AddrFrom   string
+	Version     int
+	BestHeight  int
+	BestVersion int
+	AddrFrom    string
 }
 
 func CmdToBytes(cmd string) []byte {
@@ -150,7 +151,8 @@ func SendTx(addr string, tnx *blockchain.Transaction) {
 
 func SendVersion(addr string, chain *blockchain.BlockChain) {
 	bestHeight := chain.GetBestHeight()
-	payload := GobEncode(Version{version, bestHeight, nodeAddress})
+	bestVersion := chain.GetBestVersion()
+	payload := GobEncode(Version{version, bestHeight, bestVersion, nodeAddress})
 
 	request := append(CmdToBytes("version"), payload...)
 
@@ -300,6 +302,7 @@ func HandleGetData(request []byte, chain *blockchain.BlockChain) {
 		SendBlock(payload.AddrFrom, &block)
 	}
 
+	//Need to make changes here.
 	if payload.Type == "tx" {
 		txID := hex.EncodeToString(payload.ID)
 		tx := memoryPool[txID]
@@ -320,11 +323,14 @@ func HandleVersion(request []byte, chain *blockchain.BlockChain) {
 	}
 
 	bestHeight := chain.GetBestHeight()
-	otherHeight := payload.BestHeight
+	bestVersion := chain.GetBestVersion()
 
-	if bestHeight < otherHeight {
+	otherHeight := payload.BestHeight
+	otherVersion := payload.BestVersion
+
+	if bestHeight < otherHeight || bestVersion < otherVersion {
 		SendGetBlocks(payload.AddrFrom)
-	} else if bestHeight > otherHeight {
+	} else if bestHeight > otherHeight || bestVersion > otherVersion {
 		SendVersion(payload.AddrFrom, chain)
 	}
 
@@ -359,50 +365,51 @@ func HandleTx(request []byte, chain *blockchain.BlockChain) {
 		}
 	} else {
 		if len(memoryPool) >= 2 && len(mineAddress) > 0 {
-			MineTx(chain)
+			// MineTx(chain)
 		}
 	}
 }
 
-func MineTx(chain *blockchain.BlockChain) {
-	var txs []*blockchain.Transaction
+func MineTx(transactions []*blockchain.Transaction, hash string) {
+	// var txs []*blockchain.Transaction
 
-	for id := range memoryPool {
-		fmt.Printf("tx: %s\n", memoryPool[id].ID)
-		tx := memoryPool[id]
-		if chain.VerifyTransaction(&tx) {
-			txs = append(txs, &tx)
-		}
-	}
+	// // for id := range memoryPool {
+	// // 	fmt.Printf("tx: %s\n", memoryPool[id].ID)
+	// // 	tx := memoryPool[id]
+	// // 	if chain.VerifyTransaction(&tx) {
+	// // 		txs = append(txs, &tx)
+	// // 	}
+	// // }
 
-	if len(txs) == 0 {
-		fmt.Println("All Transactions are invalid")
-		return
-	}
+	// // if len(txs) == 0 {
+	// // 	fmt.Println("All Transactions are invalid")
+	// // 	return
+	// // }
 
-	cbTx := blockchain.CoinbaseTx(mineAddress, "")
-	txs = append(txs, cbTx)
+	// // cbTx := blockchain.CoinbaseTx(mineAddress, "")
+	// // txs = append(txs, cbTx)
 
-	newBlock := chain.MineBlock(txs)
-	UTXOSet := blockchain.UTXOSet{chain}
-	UTXOSet.Reindex()
+	// newBlock := chain.AddTransactions(txs, hash)
 
-	fmt.Println("New Block mined")
+	// // UTXOSet := blockchain.UTXOSet{chain}
+	// // UTXOSet.Reindex()
 
-	for _, tx := range txs {
-		txID := hex.EncodeToString(tx.ID)
-		delete(memoryPool, txID)
-	}
+	// fmt.Println("Block Updated")
 
-	for _, node := range KnownNodes {
-		if node != nodeAddress {
-			SendInv(node, "block", [][]byte{newBlock.Hash})
-		}
-	}
+	// // for _, tx := range txs {
+	// // 	txID := hex.EncodeToString(tx.ID)
+	// // 	delete(memoryPool, txID)
+	// // }
 
-	if len(memoryPool) > 0 {
-		MineTx(chain)
-	}
+	// for _, node := range KnownNodes {
+	// 	if node != nodeAddress {
+	// 		SendInv(node, "block", [][]byte{newBlock.Hash})
+	// 	}
+	// }
+
+	// // if len(memoryPool) > 0 {
+	// // 	MineTx(chain)
+	// // }
 }
 
 func HandleConnection(conn net.Conn, chain *blockchain.BlockChain) {
