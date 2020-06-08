@@ -85,12 +85,14 @@ func CoinbaseTx(from string, data string) *Transaction {
 	return nil
 }
 
-func NewTransaction(from string, blockHash string, chain *BlockChain) *Transaction {
+func NewTransaction(from, nodeID string, blockHash string, chain *BlockChain) *Transaction {
 	block := chain.FindBlock(blockHash)
 	bhash := hex.EncodeToString(block.Hash)
 
-	wallets, err := wallet.CreateWallets()
-	Handle(err)
+	wallets, err := wallet.CreateWallets(nodeID)
+	if err != nil {
+		log.Panic(err)
+	}
 	w := wallets.GetWallet(from)
 	// pubKeyHash := wallet.PublicKeyHash(w.PublicKey)
 
