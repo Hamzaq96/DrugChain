@@ -346,6 +346,7 @@ func (bc *BlockChain) FindTransaction(ID []byte) (Transaction, error) {
 	return Transaction{}, errors.New("Transaction does not exist")
 }
 
+<<<<<<< HEAD
 func (chain *BlockChain) UpdateBlock(data, hash string) *Block {
 	var block *Block
 
@@ -398,6 +399,8 @@ func (chain *BlockChain) UpdateBlock(data, hash string) *Block {
 	// return nil
 }
 
+=======
+>>>>>>> 5b9bd97b039a2d9261bad8a0738b116c80b9dca1
 func retry(dir string, originalOpts badger.Options) (*badger.DB, error) {
 	lockPath := filepath.Join(dir, "LOCK")
 	if err := os.Remove(lockPath); err != nil {
@@ -423,3 +426,55 @@ func openDB(dir string, opts badger.Options) (*badger.DB, error) {
 		return db, nil
 	}
 }
+<<<<<<< HEAD
+=======
+
+func (chain *BlockChain) UpdateBlock(hash string) {
+	// var block *Block
+
+	// iter := chain.Iterator()
+
+	// for {
+	// 	block = iter.Next()
+	// 	bhash := hex.EncodeToString(block.Hash)
+
+	// 	if bhash == hash {
+	// 		var lastHash []byte
+
+	// 		err := chain.Database.View(func(txn *badger.Txn) error {
+	// 			item, err := txn.Get([]byte("lh"))
+	// 			Handle(err)
+	// 			lastHash, err = item.Value()
+
+	// 			return err
+	// 		})
+	// 		Handle(err)
+
+	// 		// newBlock := UpdateBlock(block.Hash, "Data changed too", block.PrevHash, block.Nonce)
+
+	// 		lhash := hex.EncodeToString(lastHash)
+	// 		if lhash == bhash {
+	// 			err = chain.Database.Update(func(txn *badger.Txn) error {
+	// 				err := txn.Delete(block.Hash)
+	// 				Handle(err)
+	// 				err = txn.Set(newBlock.Hash, newBlock.Serialize())
+	// 				err = txn.Set([]byte("lh"), newBlock.Hash)
+	// 				return err
+	// 			})
+	// 			Handle(err)
+	// 		}
+
+	// 		err = chain.Database.Update(func(txn *badger.Txn) error {
+	// 			err := txn.Delete(block.Hash)
+	// 			Handle(err)
+	// 			err = txn.Set(newBlock.Hash, newBlock.Serialize())
+	// 			return err
+	// 		})
+	// 		Handle(err)
+
+	// 	}
+	// }
+
+	// return nil
+}
+>>>>>>> 5b9bd97b039a2d9261bad8a0738b116c80b9dca1

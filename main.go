@@ -11,6 +11,7 @@ func main() {
 	cmd := cli.CommandLine{}
 	cmd.Run()
 }
+<<<<<<< HEAD
 
 // fun main() {
 // 	err := godotenv.Load()
@@ -73,3 +74,5 @@ func main() {
 // 	}()
 
 // }
+=======
+>>>>>>> 5b9bd97b039a2d9261bad8a0738b116c80b9dca1
